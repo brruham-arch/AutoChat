@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AutoChat</string>
+    <string name="accessibility_label">AutoChat Service</string>
+    <string name="accessibility_description">Untuk auto tulis dan kirim pesan di app lain</string>
+</resources>
