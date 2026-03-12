@@ -74,6 +74,7 @@ class AutoChatService : AccessibilityService() {
     }
 
     private fun trySend(root: AccessibilityNodeInfo, inputNode: AccessibilityNodeInfo): Boolean {
+        // 1. Cari by resource ID yang dikenal
         val knownIds = listOf("send", "btn_send", "action_send", "sendButton",
             "send_button", "conversation_entry_action_button", "chat_send_button")
         for (idPart in knownIds) {
@@ -82,35 +83,61 @@ class AutoChatService : AccessibilityService() {
             for (node in nodes) {
                 if (node.isClickable && node.isEnabled) {
                     node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    Log.d(TAG, "Send via ID: $idPart")
                     return true
                 }
             }
         }
-        val nearBtn = findSendButtonNearInput(root, inputNode)
-        if (nearBtn != null) {
-            nearBtn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+
+        // 2. Cari tombol paling KANAN yang sejajar input
+        // (bukan yang pertama, tapi yang paling ujung kanan layar)
+        val rightmost = findRightmostButtonNearInput(root, inputNode)
+        if (rightmost != null) {
+            rightmost.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            Log.d(TAG, "Send via rightmost button")
             return true
         }
-        return inputNode.performAction(66)
+
+        // 3. Fallback IME action
+        val result = inputNode.performAction(66)
+        Log.d(TAG, "Send via IME: $result")
+        return result
     }
 
-    private fun findSendButtonNearInput(root: AccessibilityNodeInfo, inputNode: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+    /**
+     * Ambil tombol paling KANAN yang sejajar vertikal dengan input field.
+     * Tombol send selalu paling ujung kanan (WA hijau, TikTok panah merah).
+     */
+    private fun findRightmostButtonNearInput(
+        root: AccessibilityNodeInfo,
+        inputNode: AccessibilityNodeInfo
+    ): AccessibilityNodeInfo? {
         val inputRect = Rect()
         inputNode.getBoundsInScreen(inputRect)
+
         val candidates = mutableListOf<AccessibilityNodeInfo>()
         collectClickable(root, candidates)
+
         var best: AccessibilityNodeInfo? = null
-        var bestScore = Int.MAX_VALUE
+        var bestRight = -1
+
         for (node in candidates) {
             if (node == inputNode) continue
             val r = Rect()
             node.getBoundsInScreen(r)
-            if (r.left < inputRect.right - 10) continue
+
+            // Harus di kanan input
+            if (r.centerX() <= inputRect.right) continue
+            // Harus sejajar vertikal (dalam 150px)
             val vertDiff = Math.abs(r.centerY() - inputRect.centerY())
             if (vertDiff > 150) continue
+            // Ukuran wajar tombol
             if (r.width() > 250 || r.height() > 250) continue
-            val score = (r.left - inputRect.right) + vertDiff
-            if (score < bestScore) { bestScore = score; best = node }
+            // Ambil yang paling kanan (nilai right terbesar)
+            if (r.right > bestRight) {
+                bestRight = r.right
+                best = node
+            }
         }
         return best
     }
