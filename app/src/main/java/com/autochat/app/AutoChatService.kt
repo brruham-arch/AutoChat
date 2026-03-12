@@ -13,13 +13,13 @@ import android.os.Bundle
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import java.util.concurrent.CountDownLatch
 
 class AutoChatService : AccessibilityService() {
 
     companion object {
         const val TAG = "AutoChatService"
         const val ACTION_INJECT = "com.autochat.app.INJECT"
-        const val ACTION_TAP = "com.autochat.app.TAP"
         const val EXTRA_TEXT = "text"
         const val EXTRA_TAP_X = "tap_x"
         const val EXTRA_TAP_Y = "tap_y"
@@ -28,28 +28,18 @@ class AutoChatService : AccessibilityService() {
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                ACTION_INJECT -> {
-                    val text = intent.getStringExtra(EXTRA_TEXT) ?: return
-                    val preTap = intent.getBooleanExtra(EXTRA_PRE_TAP, false)
-                    val tapX = intent.getFloatExtra(EXTRA_TAP_X, -1f)
-                    val tapY = intent.getFloatExtra(EXTRA_TAP_Y, -1f)
-                    performInject(text, preTap, tapX, tapY)
-                }
-                ACTION_TAP -> {
-                    val x = intent.getFloatExtra(EXTRA_TAP_X, -1f)
-                    val y = intent.getFloatExtra(EXTRA_TAP_Y, -1f)
-                    if (x >= 0 && y >= 0) tapCoordinate(x, y)
-                }
+            if (intent.action == ACTION_INJECT) {
+                val text = intent.getStringExtra(EXTRA_TEXT) ?: return
+                val preTap = intent.getBooleanExtra(EXTRA_PRE_TAP, false)
+                val tapX = intent.getFloatExtra(EXTRA_TAP_X, -1f)
+                val tapY = intent.getFloatExtra(EXTRA_TAP_Y, -1f)
+                performInject(text, preTap, tapX, tapY)
             }
         }
     }
 
     override fun onServiceConnected() {
-        val filter = IntentFilter().apply {
-            addAction(ACTION_INJECT)
-            addAction(ACTION_TAP)
-        }
+        val filter = IntentFilter(ACTION_INJECT)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
         } else {
@@ -65,59 +55,59 @@ class AutoChatService : AccessibilityService() {
         super.onDestroy()
     }
 
-    fun tapCoordinate(x: Float, y: Float, callback: (() -> Unit)? = null) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            Log.e(TAG, "GestureDescription butuh API 24+")
-            callback?.invoke()
-            return
-        }
+    /** Tap koordinat, BLOCK thread sampai gesture selesai */
+    private fun tapCoordinateSync(x: Float, y: Float) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        val latch = CountDownLatch(1)
         val path = Path().apply { moveTo(x, y) }
         val stroke = GestureDescription.StrokeDescription(path, 0, 100)
         val gesture = GestureDescription.Builder().addStroke(stroke).build()
         dispatchGesture(gesture, object : GestureResultCallback() {
-            override fun onCompleted(gestureDescription: GestureDescription) {
-                Log.d(TAG, "Tap OK: $x,$y")
-                callback?.invoke()
-            }
-            override fun onCancelled(gestureDescription: GestureDescription) {
-                Log.w(TAG, "Tap cancelled")
-                callback?.invoke()
-            }
+            override fun onCompleted(g: GestureDescription) { latch.countDown() }
+            override fun onCancelled(g: GestureDescription) { latch.countDown() }
         }, null)
+        latch.await() // tunggu sampai gesture benar-benar selesai
     }
 
     private fun performInject(text: String, preTap: Boolean, tapX: Float, tapY: Float) {
         Thread {
             try {
-                // Jika ada pre-tap (misal TikTok "Ketik...")
+                // 1. TAP - buka input
                 if (preTap && tapX >= 0 && tapY >= 0) {
-                    Log.d(TAG, "Pre-tap: $tapX,$tapY")
-                    tapCoordinate(tapX, tapY)
-                    Thread.sleep(600) // Tunggu keyboard/input muncul
+                    tapCoordinateSync(tapX, tapY)
+                    Log.d(TAG, "Pre-tap done: ($tapX, $tapY)")
+                    Thread.sleep(500) // tunggu keyboard/input muncul
                 }
 
+                // 2. PASTE - isi teks ke input
                 val root = rootInActiveWindow ?: return@Thread
                 val inputNode = findInputNode(root)
                 if (inputNode == null) {
-                    Log.e(TAG, "Input field tidak ditemukan")
-                    root.recycle()
-                    return@Thread
+                    Log.e(TAG, "Input tidak ditemukan")
+                    root.recycle(); return@Thread
                 }
 
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                Thread.sleep(150)
+                Thread.sleep(100)
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                 Thread.sleep(100)
 
                 val args = Bundle()
                 args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-                Thread.sleep(400)
+                Log.d(TAG, "Teks diset: $text")
+                Thread.sleep(300)
 
+                // 3. SEND
                 val freshRoot = rootInActiveWindow ?: root
-                trySend(freshRoot, inputNode)
+                val sent = trySend(freshRoot, inputNode)
+                Log.d(TAG, "Sent: $sent")
+
                 root.recycle()
                 if (freshRoot !== root) freshRoot.recycle()
+
+                // 4. DELAY ditangani oleh FloatingButtonService (setelah broadcast ini selesai)
+
             } catch (e: Exception) {
                 Log.e(TAG, "Error: ${e.message}")
             }
@@ -133,6 +123,7 @@ class AutoChatService : AccessibilityService() {
             for (node in nodes) {
                 if (node.isClickable && node.isEnabled) {
                     node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    Log.d(TAG, "Send via ID: $idPart")
                     return true
                 }
             }
@@ -140,9 +131,12 @@ class AutoChatService : AccessibilityService() {
         val rightmost = findRightmostButtonNearInput(root, inputNode)
         if (rightmost != null) {
             rightmost.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            Log.d(TAG, "Send via rightmost")
             return true
         }
-        return inputNode.performAction(66)
+        val result = inputNode.performAction(66)
+        Log.d(TAG, "Send via IME: $result")
+        return result
     }
 
     private fun findRightmostButtonNearInput(root: AccessibilityNodeInfo, inputNode: AccessibilityNodeInfo): AccessibilityNodeInfo? {
@@ -157,8 +151,7 @@ class AutoChatService : AccessibilityService() {
             val r = Rect()
             node.getBoundsInScreen(r)
             if (r.centerX() <= inputRect.right) continue
-            val vertDiff = Math.abs(r.centerY() - inputRect.centerY())
-            if (vertDiff > 150) continue
+            if (Math.abs(r.centerY() - inputRect.centerY()) > 150) continue
             if (r.width() > 250 || r.height() > 250) continue
             if (r.right > bestRight) { bestRight = r.right; best = node }
         }
