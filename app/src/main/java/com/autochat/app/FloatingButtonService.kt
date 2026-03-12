@@ -31,7 +31,6 @@ class FloatingButtonService : Service() {
 
     private var isRunning = false
     private var job: Job? = null
-    private var sendCount = 0
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -50,12 +49,10 @@ class FloatingButtonService : Service() {
         }
     }
 
-    private fun buildNotification(status: String): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("AutoChat").setContentText(status)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setPriority(NotificationCompat.PRIORITY_LOW).build()
-    }
+    private fun buildNotification(status: String) = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setContentTitle("AutoChat").setContentText(status)
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setPriority(NotificationCompat.PRIORITY_LOW).build()
 
     private fun setupFloatingView() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -99,9 +96,6 @@ class FloatingButtonService : Service() {
         if (isRunning) stopSending() else startSending()
     }
 
-    /**
-     * Tampilkan lingkaran merah di koordinat selama 600ms sebagai debug visual
-     */
     private fun showDebugDot(x: Float, y: Float) {
         mainHandler.post {
             val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
@@ -111,38 +105,21 @@ class FloatingButtonService : Service() {
             val size = 80
             val dotView = object : View(this) {
                 override fun onDraw(canvas: Canvas) {
-                    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.RED; alpha = 200; style = Paint.Style.FILL
-                    }
-                    canvas.drawCircle(width / 2f, height / 2f, width / 2f, paint)
-                    // Garis silang
+                    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.RED; alpha = 200; style = Paint.Style.FILL }
+                    canvas.drawCircle(width/2f, height/2f, width/2f, paint)
                     paint.color = Color.WHITE; paint.strokeWidth = 4f; paint.style = Paint.Style.STROKE
                     canvas.drawLine(0f, height/2f, width.toFloat(), height/2f, paint)
                     canvas.drawLine(width/2f, 0f, width/2f, height.toFloat(), paint)
                 }
             }
-            dotView.setBackgroundColor(Color.TRANSPARENT)
-
-            val params = WindowManager.LayoutParams(
-                size, size, layoutType,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            val p = WindowManager.LayoutParams(size, size, layoutType,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                 PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.TOP or Gravity.START
-                this.x = (x - size / 2).toInt()
-                this.y = (y - size / 2).toInt()
-            }
-
+            ).apply { gravity = Gravity.TOP or Gravity.START; this.x = (x-size/2).toInt(); this.y = (y-size/2).toInt() }
             try {
-                windowManager.addView(dotView, params)
-                // Hapus setelah 700ms
-                mainHandler.postDelayed({
-                    try { windowManager.removeView(dotView) } catch (e: Exception) {}
-                }, 700)
-            } catch (e: Exception) {
-                Log.e(TAG, "Debug dot error: ${e.message}")
-            }
+                windowManager.addView(dotView, p)
+                mainHandler.postDelayed({ try { windowManager.removeView(dotView) } catch (e: Exception) {} }, 700)
+            } catch (e: Exception) {}
         }
     }
 
@@ -159,30 +136,37 @@ class FloatingButtonService : Service() {
         val messages: List<String> = try { Gson().fromJson(messagesJson, type) } catch (e: Exception) { emptyList() }
         if (messages.isEmpty()) return
 
-        isRunning = true; sendCount = 0
+        isRunning = true
         mainHandler.post { tvBtn.text = "⏹"; tvCounter.text = "0/${messages.size}" }
 
         job = CoroutineScope(Dispatchers.IO).launch {
             do {
                 for (i in messages.indices) {
                     if (!isRunning) break
-                    sendCount++
+
                     mainHandler.post { tvCounter.text = "${i+1}/${messages.size}" }
 
-                    // Tampilkan debug dot sebelum kirim jika pre-tap aktif
+                    // Tampilkan debug dot jika pre-tap aktif
                     if (preTap && tapX >= 0 && tapY >= 0) {
                         showDebugDot(tapX, tapY)
                     }
 
+                    // Kirim broadcast — AutoChatService yang handle:
+                    // tap(500ms) → paste → send → delay
                     val intent = Intent(AutoChatService.ACTION_INJECT).apply {
                         setPackage(packageName)
                         putExtra(AutoChatService.EXTRA_TEXT, messages[i])
                         putExtra(AutoChatService.EXTRA_PRE_TAP, preTap)
                         putExtra(AutoChatService.EXTRA_TAP_X, tapX)
                         putExtra(AutoChatService.EXTRA_TAP_Y, tapY)
+                        putExtra(AutoChatService.EXTRA_DELAY, delay) // delay dikirim ke service
                     }
                     sendBroadcast(intent)
-                    delay(delay)
+
+                    // Tunggu sampai satu siklus penuh selesai sebelum kirim pesan berikutnya
+                    // Estimasi: tap(600ms) + paste(500ms) + send(100ms) + delay
+                    val waitTime = 600L + 500L + 100L + delay
+                    delay(waitTime)
                 }
             } while (isRunning && loop)
             if (isRunning && !loop) withContext(Dispatchers.Main) { stopSending() }

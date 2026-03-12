@@ -24,6 +24,7 @@ class AutoChatService : AccessibilityService() {
         const val EXTRA_TAP_X = "tap_x"
         const val EXTRA_TAP_Y = "tap_y"
         const val EXTRA_PRE_TAP = "pre_tap"
+        const val EXTRA_DELAY = "delay"
     }
 
     private val receiver = object : BroadcastReceiver() {
@@ -33,7 +34,8 @@ class AutoChatService : AccessibilityService() {
                 val preTap = intent.getBooleanExtra(EXTRA_PRE_TAP, false)
                 val tapX = intent.getFloatExtra(EXTRA_TAP_X, -1f)
                 val tapY = intent.getFloatExtra(EXTRA_TAP_Y, -1f)
-                performInject(text, preTap, tapX, tapY)
+                val delay = intent.getLongExtra(EXTRA_DELAY, 2000L)
+                performInject(text, preTap, tapX, tapY, delay)
             }
         }
     }
@@ -55,7 +57,6 @@ class AutoChatService : AccessibilityService() {
         super.onDestroy()
     }
 
-    /** Tap koordinat, BLOCK thread sampai gesture selesai */
     private fun tapCoordinateSync(x: Float, y: Float) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
         val latch = CountDownLatch(1)
@@ -66,26 +67,23 @@ class AutoChatService : AccessibilityService() {
             override fun onCompleted(g: GestureDescription) { latch.countDown() }
             override fun onCancelled(g: GestureDescription) { latch.countDown() }
         }, null)
-        latch.await() // tunggu sampai gesture benar-benar selesai
+        latch.await()
     }
 
-    private fun performInject(text: String, preTap: Boolean, tapX: Float, tapY: Float) {
+    private fun performInject(text: String, preTap: Boolean, tapX: Float, tapY: Float, delay: Long) {
         Thread {
             try {
                 // 1. TAP - buka input
                 if (preTap && tapX >= 0 && tapY >= 0) {
                     tapCoordinateSync(tapX, tapY)
-                    Log.d(TAG, "Pre-tap done: ($tapX, $tapY)")
-                    Thread.sleep(500) // tunggu keyboard/input muncul
+                    Log.d(TAG, "Tap done")
+                    Thread.sleep(500) // tunggu input muncul
                 }
 
-                // 2. PASTE - isi teks ke input
+                // 2. ISI TEKS
                 val root = rootInActiveWindow ?: return@Thread
                 val inputNode = findInputNode(root)
-                if (inputNode == null) {
-                    Log.e(TAG, "Input tidak ditemukan")
-                    root.recycle(); return@Thread
-                }
+                if (inputNode == null) { root.recycle(); return@Thread }
 
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                 Thread.sleep(100)
@@ -95,7 +93,6 @@ class AutoChatService : AccessibilityService() {
                 val args = Bundle()
                 args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-                Log.d(TAG, "Teks diset: $text")
                 Thread.sleep(300)
 
                 // 3. SEND
@@ -106,7 +103,9 @@ class AutoChatService : AccessibilityService() {
                 root.recycle()
                 if (freshRoot !== root) freshRoot.recycle()
 
-                // 4. DELAY ditangani oleh FloatingButtonService (setelah broadcast ini selesai)
+                // 4. DELAY — setelah send, sebelum siklus berikutnya
+                Thread.sleep(delay)
+                Log.d(TAG, "Delay $delay ms selesai, siap siklus berikutnya")
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error: ${e.message}")
@@ -123,20 +122,13 @@ class AutoChatService : AccessibilityService() {
             for (node in nodes) {
                 if (node.isClickable && node.isEnabled) {
                     node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    Log.d(TAG, "Send via ID: $idPart")
                     return true
                 }
             }
         }
         val rightmost = findRightmostButtonNearInput(root, inputNode)
-        if (rightmost != null) {
-            rightmost.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            Log.d(TAG, "Send via rightmost")
-            return true
-        }
-        val result = inputNode.performAction(66)
-        Log.d(TAG, "Send via IME: $result")
-        return result
+        if (rightmost != null) { rightmost.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
+        return inputNode.performAction(66)
     }
 
     private fun findRightmostButtonNearInput(root: AccessibilityNodeInfo, inputNode: AccessibilityNodeInfo): AccessibilityNodeInfo? {
