@@ -1,153 +1,94 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp"
     android:background="#121212">
 
-    <!-- Title -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="🤖 AutoChat"
-        android:textSize="24sp"
-        android:textColor="#FFFFFF"
-        android:textStyle="bold"
-        android:gravity="center"
-        android:paddingBottom="16dp"/>
-
-    <!-- Permission Buttons -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="12dp">
-
-        <Button
-            android:id="@+id/btnAccessibility"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="⚙ Accessibility"
-            android:layout_marginEnd="4dp"
-            android:backgroundTint="#FF5722"/>
-
-        <Button
-            android:id="@+id/btnOverlay"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="🪟 Overlay"
-            android:layout_marginStart="4dp"
-            android:backgroundTint="#9C27B0"/>
-    </LinearLayout>
-
-    <!-- Delay Setting -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="8dp">
+        android:orientation="vertical"
+        android:padding="16dp">
 
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="⏱ Delay (ms): "
-            android:textColor="#CCCCCC"
-            android:textSize="15sp"/>
-
-        <EditText
-            android:id="@+id/etDelay"
-            android:layout_width="100dp"
-            android:layout_height="wrap_content"
-            android:inputType="number"
-            android:text="2000"
+            android:text="🤖 AutoChat"
+            android:textSize="24sp"
             android:textColor="#FFFFFF"
-            android:backgroundTint="#444444"/>
+            android:textStyle="bold"
+            android:gravity="center"
+            android:paddingBottom="16dp"/>
 
-        <Space android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1"/>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+            <Button android:id="@+id/btnAccessibility" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="⚙ Accessibility" android:layout_marginEnd="4dp" android:backgroundTint="#FF5722"/>
+            <Button android:id="@+id/btnOverlay" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="🪟 Overlay" android:layout_marginStart="4dp" android:backgroundTint="#9C27B0"/>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="⏱ Delay (ms): " android:textColor="#CCCCCC" android:textSize="15sp"/>
+            <EditText android:id="@+id/etDelay" android:layout_width="100dp" android:layout_height="wrap_content" android:inputType="number" android:text="2000" android:textColor="#FFFFFF" android:backgroundTint="#444444"/>
+            <Space android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🔁 Loop" android:textColor="#CCCCCC" android:textSize="15sp" android:layout_marginEnd="4dp"/>
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchLoop" android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true"/>
+        </LinearLayout>
+
+        <!-- PRE-TAP SECTION -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="👆 Pre-Tap (untuk TikTok Live, dll)"
+            android:textColor="#AAAAAA"
+            android:textSize="13sp"
+            android:paddingBottom="4dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Aktif: " android:textColor="#CCCCCC"/>
+            <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchPreTap" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <Space android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1"/>
+            <Button android:id="@+id/btnPickTap" android:layout_width="wrap_content" android:layout_height="36dp" android:text="📍 Pilih Titik" android:textSize="12sp" android:backgroundTint="#FF9800"/>
+        </LinearLayout>
 
         <TextView
-            android:layout_width="wrap_content"
+            android:id="@+id/tvTapCoord"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🔁 Loop"
-            android:textColor="#CCCCCC"
-            android:textSize="15sp"
-            android:layout_marginEnd="4dp"/>
+            android:text="Koordinat: belum diset"
+            android:textColor="#888888"
+            android:textSize="12sp"
+            android:layout_marginBottom="12dp"/>
 
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switchLoop"
-            android:layout_width="wrap_content"
+        <!-- PESAN -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:checked="true"/>
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+            <EditText android:id="@+id/etMessage" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="Tulis pesan..." android:textColor="#FFFFFF" android:textColorHint="#888888" android:backgroundTint="#333333" android:layout_marginEnd="8dp"/>
+            <Button android:id="@+id/btnAdd" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="+ Tambah" android:backgroundTint="#2196F3"/>
+        </LinearLayout>
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="📋 Daftar Pesan (tap edit, long press hapus):" android:textColor="#AAAAAA" android:textSize="13sp" android:paddingBottom="4dp"/>
+
+        <ListView android:id="@+id/listMessages" android:layout_width="match_parent" android:layout_height="200dp" android:background="#1E1E1E" android:divider="#333333" android:dividerHeight="1dp"/>
+
+        <TextView android:id="@+id/tvStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Status: Siap" android:textColor="#888888" android:textSize="13sp" android:gravity="center" android:paddingTop="8dp"/>
+
+        <Button android:id="@+id/btnStart" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="▶ TAMPILKAN FLOATING BUTTON" android:textSize="16sp" android:backgroundTint="#4CAF50"/>
+
     </LinearLayout>
-
-    <!-- Add Message -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="8dp">
-
-        <EditText
-            android:id="@+id/etMessage"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="Tulis pesan..."
-            android:textColor="#FFFFFF"
-            android:textColorHint="#888888"
-            android:backgroundTint="#333333"
-            android:layout_marginEnd="8dp"/>
-
-        <Button
-            android:id="@+id/btnAdd"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="+ Tambah"
-            android:backgroundTint="#2196F3"/>
-    </LinearLayout>
-
-    <!-- Message List Label -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="📋 Daftar Pesan (long press untuk hapus):"
-        android:textColor="#AAAAAA"
-        android:textSize="13sp"
-        android:paddingBottom="4dp"/>
-
-    <!-- Message List -->
-    <ListView
-        android:id="@+id/listMessages"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="#1E1E1E"
-        android:divider="#333333"
-        android:dividerHeight="1dp"/>
-
-    <!-- Status -->
-    <TextView
-        android:id="@+id/tvStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Status: Siap"
-        android:textColor="#888888"
-        android:textSize="13sp"
-        android:gravity="center"
-        android:paddingTop="8dp"/>
-
-    <!-- Start Button -->
-    <Button
-        android:id="@+id/btnStart"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="▶ TAMPILKAN FLOATING BUTTON"
-        android:textSize="16sp"
-        android:backgroundTint="#4CAF50"/>
-
-</LinearLayout>
+</ScrollView>

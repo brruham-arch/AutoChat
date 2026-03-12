@@ -30,9 +30,8 @@ class FloatingButtonService : Service() {
     private lateinit var tvCounter: TextView
 
     private var isRunning = false
-    private var currentIndex = 0
-    private var sendCount = 0
     private var job: Job? = null
+    private var sendCount = 0
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -46,11 +45,7 @@ class FloatingButtonService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "AutoChat",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply { description = "AutoChat floating service" }
+            val channel = NotificationChannel(CHANNEL_ID, "AutoChat", NotificationManager.IMPORTANCE_LOW)
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
@@ -64,23 +59,15 @@ class FloatingButtonService : Service() {
             .build()
     }
 
-    private fun updateNotification(status: String) {
-        val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(NOTIF_ID, buildNotification(status))
-    }
-
     private fun setupFloatingView() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-
         floatingView = LayoutInflater.from(this).inflate(R.layout.floating_button, null)
         tvBtn = floatingView.findViewById(R.id.tvFloatBtn)
         tvCounter = floatingView.findViewById(R.id.tvCounter)
 
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        else
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
+        else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -88,64 +75,36 @@ class FloatingButtonService : Service() {
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 50
-            y = 300
-        }
+        ).apply { gravity = Gravity.TOP or Gravity.START; x = 50; y = 300 }
 
         windowManager.addView(floatingView, params)
         setupDrag(params)
-
-        // Single tap = toggle start/stop
-        floatingView.setOnClickListener {
-            toggleRunning()
-        }
-
-        // Long press = tutup service
-        floatingView.setOnLongClickListener {
-            stopSelf()
-            true
-        }
+        floatingView.setOnClickListener { toggleRunning() }
+        floatingView.setOnLongClickListener { stopSelf(); true }
     }
 
     private fun setupDrag(params: WindowManager.LayoutParams) {
         var initX = 0; var initY = 0
         var initTouchX = 0f; var initTouchY = 0f
         var moved = false
-
         floatingView.setOnTouchListener { v, event ->
             when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    initX = params.x; initY = params.y
-                    initTouchX = event.rawX; initTouchY = event.rawY
-                    moved = false
-                    true
-                }
+                MotionEvent.ACTION_DOWN -> { initX = params.x; initY = params.y; initTouchX = event.rawX; initTouchY = event.rawY; moved = false; true }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - initTouchX).toInt()
                     val dy = (event.rawY - initTouchY).toInt()
                     if (Math.abs(dx) > 5 || Math.abs(dy) > 5) moved = true
-                    params.x = initX + dx
-                    params.y = initY + dy
-                    windowManager.updateViewLayout(floatingView, params)
-                    true
+                    params.x = initX + dx; params.y = initY + dy
+                    windowManager.updateViewLayout(floatingView, params); true
                 }
-                MotionEvent.ACTION_UP -> {
-                    if (!moved) v.performClick()
-                    true
-                }
+                MotionEvent.ACTION_UP -> { if (!moved) v.performClick(); true }
                 else -> false
             }
         }
     }
 
     private fun toggleRunning() {
-        if (isRunning) {
-            stopSending()
-        } else {
-            startSending()
-        }
+        if (isRunning) stopSending() else startSending()
     }
 
     private fun startSending() {
@@ -153,79 +112,47 @@ class FloatingButtonService : Service() {
         val messagesJson = prefs.getString("messages", "[]") ?: "[]"
         val delay = prefs.getLong("delay", 2000)
         val loop = prefs.getBoolean("loop", true)
+        val preTap = prefs.getBoolean("pre_tap", false)
+        val tapX = prefs.getFloat("tap_x", -1f)
+        val tapY = prefs.getFloat("tap_y", -1f)
 
         val type = object : TypeToken<List<String>>() {}.type
-        val messages: List<String> = try {
-            Gson().fromJson(messagesJson, type)
-        } catch (e: Exception) { emptyList() }
+        val messages: List<String> = try { Gson().fromJson(messagesJson, type) } catch (e: Exception) { emptyList() }
+        if (messages.isEmpty()) return
 
-        if (messages.isEmpty()) {
-            Log.w(TAG, "Daftar pesan kosong!")
-            return
-        }
-
-        isRunning = true
-        sendCount = 0
-        currentIndex = 0
-
-        mainHandler.post {
-            tvBtn.text = "⏹"
-            tvBtn.setBackgroundResource(android.R.drawable.btn_default)
-            tvCounter.text = "0/${messages.size}"
-        }
-        updateNotification("Mengirim... Loop=$loop")
+        isRunning = true; sendCount = 0
+        mainHandler.post { tvBtn.text = "⏹"; tvCounter.text = "0/${messages.size}" }
 
         job = CoroutineScope(Dispatchers.IO).launch {
             do {
                 for (i in messages.indices) {
                     if (!isRunning) break
-
-                    currentIndex = i
-                    val text = messages[i]
                     sendCount++
+                    mainHandler.post { tvCounter.text = "${i+1}/${messages.size}" }
 
-                    Log.d(TAG, "Kirim [${i+1}/${messages.size}]: $text")
-
-                    // Update counter UI
-                    mainHandler.post {
-                        tvCounter.text = "${i+1}/${messages.size}"
+                    val intent = Intent(AutoChatService.ACTION_INJECT).apply {
+                        setPackage(packageName)
+                        putExtra(AutoChatService.EXTRA_TEXT, messages[i])
+                        putExtra(AutoChatService.EXTRA_PRE_TAP, preTap)
+                        putExtra(AutoChatService.EXTRA_TAP_X, tapX)
+                        putExtra(AutoChatService.EXTRA_TAP_Y, tapY)
                     }
-
-                    // Kirim broadcast ke AutoChatService
-                    val intent = Intent(AutoChatService.ACTION_INJECT)
-                    intent.setPackage(packageName)
-                    intent.putExtra(AutoChatService.EXTRA_TEXT, text)
                     sendBroadcast(intent)
-
                     delay(delay)
                 }
             } while (isRunning && loop)
-
-            // Selesai (non-loop)
-            if (isRunning && !loop) {
-                withContext(Dispatchers.Main) {
-                    stopSending()
-                }
-            }
+            if (isRunning && !loop) withContext(Dispatchers.Main) { stopSending() }
         }
     }
 
     private fun stopSending() {
-        isRunning = false
-        job?.cancel()
-        mainHandler.post {
-            tvBtn.text = "▶"
-            tvCounter.text = "Stop"
-        }
-        updateNotification("Berhenti. Total kirim: $sendCount")
-        Log.d(TAG, "Dihentikan. Total terkirim: $sendCount")
+        isRunning = false; job?.cancel()
+        mainHandler.post { tvBtn.text = "▶"; tvCounter.text = "Stop" }
     }
 
     override fun onDestroy() {
         stopSending()
-        if (::floatingView.isInitialized) {
-            try { windowManager.removeView(floatingView) } catch (e: Exception) {}
-        }
+        if (::floatingView.isInitialized) try { windowManager.removeView(floatingView) } catch (e: Exception) {}
         super.onDestroy()
     }
 }
